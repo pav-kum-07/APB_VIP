@@ -55,7 +55,7 @@ Architected for verification scalability across block-level, subsystem, and full
 - **Parameterized & Highly Reusable**: Fully parameterized `ADDR_WIDTH` and `DATA_WIDTH` supporting 32-bit, 64-bit, or custom word architectures.
 - **Race-Free Interface**: Implements dedicated SystemVerilog **Clocking Blocks** (`default input #1step output #1ns`) eliminating zero-hold timing races between testbench and DUT.
 - **Active / Passive Mode Switching**: Instantiates Driver and Sequencer only when `is_active == UVM_ACTIVE`; acts as a non-intrusive bus sniffer in `UVM_PASSIVE` mode for full SoC integration.
-- **Dynamic Sparse Memory Scoreboard**: Uses SystemVerilog associative arrays (`mem[addr]`) to verify sparse addresses on-the-fly without allocating 4GB host RAM.
+- **Automated Self-Checking Scoreboard**: Implements an autonomous reference memory model (`mem[addr]`) with dynamic prediction, real-time read-data comparison, and automated end-of-test verification (`check_phase` and `report_phase`).
 - **100% Functional Coverage Metric Closure**: Covergroups tracking transaction types (`cp_op`), address partitions (`cp_addr`), error responses (`cp_pslverr`), and full cross coverage (`cr_op_addr`).
 - **8 Golden SVA Protocol Assertions**: Concurrent cycle-accurate assertion checks embedded directly in the interface.
 
