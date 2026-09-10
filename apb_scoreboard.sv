@@ -51,6 +51,16 @@ class apb_scoreboard #(
     logic [DATA_WIDTH-1:0] mem [logic [ADDR_WIDTH-1:0]];
 
     // --------------------------------------------------------------------------
+    // Scoreboard Performance & Verification Statistics
+    // --------------------------------------------------------------------------
+    int unsigned num_writes           = 0;
+    int unsigned num_reads            = 0;
+    int unsigned match_count          = 0;
+    int unsigned mismatch_count       = 0;
+    int unsigned unwritten_read_count = 0;
+    int unsigned pslverr_count        = 0;
+
+    // --------------------------------------------------------------------------
     // Constructor
     // Required for all UVM components inheriting from uvm_component/uvm_scoreboard.
     // --------------------------------------------------------------------------
@@ -76,6 +86,7 @@ class apb_scoreboard #(
         
         // Case 1: Handle Slave Error Response
         if (item.pslverr) begin
+            pslverr_count++;
             `uvm_info("SCB_ERR", $sformatf("Slave Error response detected on Addr: 0x%08h | Op: %s", 
                       item.addr, item.op.name()), UVM_MEDIUM)
         end
@@ -83,27 +94,59 @@ class apb_scoreboard #(
         // Case 2: Handle Write Transaction
         else if (item.op == APB_WRITE) begin
             mem[item.addr] = item.data;
+            num_writes++;
             `uvm_info("SCB_WRITE", $sformatf("WRITE STORED -> Addr: 0x%08h | Data: 0x%08h", 
                       item.addr, item.data), UVM_LOW)
         end
         
         // Case 3: Handle Read Transaction (Data Integrity Check)
         else if (item.op == APB_READ) begin
+            num_reads++;
             if (mem.exists(item.addr)) begin
                 // Compare hardware read data against expected value stored in reference memory
                 if (item.data == mem[item.addr]) begin
+                    match_count++;
                     `uvm_info("SCB_READ_PASS", $sformatf("READ MATCH [PASS] -> Addr: 0x%08h | Read Data: 0x%08h == Expected: 0x%08h", 
                               item.addr, item.data, mem[item.addr]), UVM_LOW)
                 end else begin
+                    mismatch_count++;
                     `uvm_error("SCB_READ_FAIL", $sformatf("READ MISMATCH [FAIL] -> Addr: 0x%08h | Read Data: 0x%08h != Expected: 0x%08h", 
                                item.addr, item.data, mem[item.addr]))
                 end
             end else begin
+                unwritten_read_count++;
                 `uvm_warning("SCB_READ_UNWRITTEN", $sformatf("Read from unwritten address 0x%08h | Read Data: 0x%08h", 
                              item.addr, item.data))
             end
         end
 
+    endfunction
+
+    // --------------------------------------------------------------------------
+    // Check Phase (Automated Test Pass/Fail Assertion)
+    // --------------------------------------------------------------------------
+    virtual function void check_phase(uvm_phase phase);
+        super.check_phase(phase);
+        if (mismatch_count > 0) begin
+            `uvm_error("SCB_CHECK", $sformatf("Test FAILED with %0d data mismatches detected in Scoreboard!", mismatch_count))
+        end
+    endfunction
+
+    // --------------------------------------------------------------------------
+    // Report Phase (Verification Summary Dashboard)
+    // --------------------------------------------------------------------------
+    virtual function void report_phase(uvm_phase phase);
+        super.report_phase(phase);
+        `uvm_info("SCB_SUMMARY", "==================================================", UVM_NONE)
+        `uvm_info("SCB_SUMMARY", "           APB SCOREBOARD FINAL REPORT            ", UVM_NONE)
+        `uvm_info("SCB_SUMMARY", "==================================================", UVM_NONE)
+        `uvm_info("SCB_SUMMARY", $sformatf(" Total Writes Tracked      : %0d", num_writes), UVM_NONE)
+        `uvm_info("SCB_SUMMARY", $sformatf(" Total Reads Checked       : %0d", num_reads), UVM_NONE)
+        `uvm_info("SCB_SUMMARY", $sformatf(" Total Matches (PASS)      : %0d", match_count), UVM_NONE)
+        `uvm_info("SCB_SUMMARY", $sformatf(" Total Mismatches (FAIL)   : %0d", mismatch_count), UVM_NONE)
+        `uvm_info("SCB_SUMMARY", $sformatf(" Unwritten Address Reads   : %0d", unwritten_read_count), UVM_NONE)
+        `uvm_info("SCB_SUMMARY", $sformatf(" Slave Error Responses     : %0d", pslverr_count), UVM_NONE)
+        `uvm_info("SCB_SUMMARY", "==================================================", UVM_NONE)
     endfunction
 
 endclass
