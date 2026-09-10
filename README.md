@@ -72,11 +72,22 @@ UVM_INFO apb_coverage.sv @ 325000: uvm_test_top.env.cov [COVERAGE]
     * Error Status (pslverr) : 100.00%
     * Cross (op x addr)      : 100.00%
 ======================================================================
+UVM_INFO apb_scoreboard.sv @ 325000: uvm_test_top.env.scb [SCB_SUMMARY]
+==================================================
+           APB SCOREBOARD FINAL REPORT            
+==================================================
+ Total Writes Tracked      : 3
+ Total Reads Checked       : 3
+ Total Matches (PASS)      : 3
+ Total Mismatches (FAIL)   : 0
+ Unwritten Address Reads   : 0
+ Slave Error Responses     : 2
+==================================================
 --- UVM Report Summary ---
 ** Report counts by severity:
-  UVM_INFO    : 31
+  UVM_INFO    : 38
   UVM_WARNING : 2  (Expected negative error responses)
-  UVM_ERROR   : 0  (ALL CHECKS & SVA ASSERTIONS PASSED)
+  UVM_ERROR   : 0  (ALL SCOREBOARD CHECKS & SVA ASSERTIONS PASSED)
   UVM_FATAL   : 0
 ======================================================================
 ```
@@ -95,6 +106,32 @@ UVM_INFO apb_coverage.sv @ 325000: uvm_test_top.env.cov [COVERAGE]
 | **6** | `assert_no_spurious_enable` | `!psel \|-> !penable` | Prevents illegal enable strobes without active peripheral selection. |
 | **7** | `assert_no_x_on_ctrl` | `psel \|-> !$isunknown(paddr) && !$isunknown(pwrite) && !$isunknown(penable)` | Catches floating uninitialized `X`/`Z` logic on active bus signals. |
 | **8** | `assert_wait_state_stability` | `(psel && penable && !pready) \|=> (psel && penable && $stable(paddr) && $stable(pwrite))` | Freezes all master control lines during multi-cycle slave wait states (`PREADY=0`). |
+
+---
+
+## 🔬 Architectural & Verification Deep-Dives
+
+### 1. Driver Sampling Semantics: Blocking (`=`) vs Non-Blocking (`<=`)
+- **Driving Interface Pins (`<=`)**: Clocking block outputs (`vif.cb_driver.penable <= 1'b1;`) schedule signal drives into the interface according to output skew.
+- **Sampling into Transactions (`=`)**: Copying sampled data (`req.data = vif.cb_driver.prdata;` and `req.pslverr = vif.cb_driver.pslverr;`) uses **blocking assignments** because `req` is a dynamic software object (not an RTL register). This guarantees that response data is available immediately in the active region when `item_done()` or `put_response()` is executed.
+
+### 2. Clocking Block Skew Strategy (`default input #1step output #1ns;`)
+- **`input #1step`**: Samples signals in the **Preponed region** right before `posedge pclk`, capturing stable values prior to any synchronous RTL flop transitions and guaranteeing zero-hold race immunity.
+- **`output #1ns`**: Delays driven signals by 1ns after clock edge to model physical wire propagation delay ($T_{co}$), ensuring clean visual inspection in waveform debuggers while satisfying $T_{setup} < T_{period} - \text{skew}$.
+
+### 3. SVA Asynchronous Reset Suppression (`disable iff (!presetn)`)
+- Prevents spurious assertion failures at simulation time $t=0$ (uninitialized states) or during abrupt mid-transfer hardware resets.
+- Uses **Overlapping Implication (`|->`)** for same-cycle invariant checks and **Non-Overlapping Implication (`|=>`)** for 1-cycle state transitions (such as SETUP $\rightarrow$ ACCESS).
+
+### 4. Dynamic Associative Memory Reference Model (`mem[addr]`)
+- Allocating a full static array for 32-bit address space would demand $2^{32} \times 4\text{ bytes} \approx 16\text{ GB}$ (32–64+ GB with simulator 4-state logic metadata), causing immediate host Out-Of-Memory (OOM) crashes.
+- Associative array `logic [31:0] mem [logic [31:0]]` acts as an on-demand hash table, consuming ~0 KB at startup and allocating dynamically only for accessed addresses.
+
+### 5. Verification Testing Taxonomy
+- **Directed Corner Testing**: Handcrafted corner vectors (e.g. `apb_write_read_seq` executing 4 directed boundaries: min `0x0000_0000`, max `0x0000_03FC`, interior `0x0000_0010`, and out-of-bounds error `0x0000_0500`).
+- **Exhaustive Testing**: Verifying 100% of all possible addresses (e.g. all 1024 locations in 1KB RAM).
+- **Stress Testing**: Flooding the DUT with back-to-back zero-delay bursts and randomized slave wait states (`PREADY=0`) to expose buffer/arbitration limits.
+- **Regression Testing**: Automated multi-seed execution of the full test suite in CI/CD pipelines to guard against functional regressions.
 
 ---
 
