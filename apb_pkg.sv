@@ -40,12 +40,14 @@ package apb_pkg;
     // --------------------------------------------------------------------------
     `include "apb_base_seq.sv"
     `include "apb_write_read_seq.sv"
+    `include "apb_random_seq.sv"
 
     // --------------------------------------------------------------------------
     // 5. Test Library
     // --------------------------------------------------------------------------
     `include "apb_test.sv"
     `include "apb_write_read_test.sv"
+    `include "apb_random_test.sv"
 
 endpackage : apb_pkg
 
