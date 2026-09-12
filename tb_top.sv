@@ -14,7 +14,15 @@ import uvm_pkg::*;
 // Include DUT
 `include "apb_slave_dut.sv"
 
-// Import VIP Package
+// --------------------------------------------------------------------------
+// VIP Package Inclusion & Import
+// ISSUE RESOLUTION (VRFC 10-2989 / VRFC 10-8530):
+// When IDE background linters or single-file analyzers compile `tb_top.sv`
+// in isolation, `apb_pkg` is undefined unless explicitly included.
+// By including `apb_pkg.sv` (which is protected by header guards `ifndef APB_PKG_SV),
+// both single-file linting and multi-file project elaboration work seamlessly.
+// --------------------------------------------------------------------------
+`include "apb_pkg.sv"
 import apb_pkg::*;
 
 module tb_top;
@@ -71,13 +79,18 @@ module tb_top;
     // UVM Test Execution & Virtual Interface Registration
     // --------------------------------------------------------------------------
     initial begin
+        string test_name;
         // Set virtual interface in UVM Config DB for the VIP
         uvm_config_db#(virtual apb_if #(ADDR_WIDTH, DATA_WIDTH))::set(
             null, "*", "vif", vif
         );
 
-        // Start UVM Simulation (Runs apb_write_read_test)
-        run_test("apb_write_read_test");
+        // Run test from command line if specified, else run apb_random_test
+        if ($value$plusargs("TESTNAME=%s", test_name)) begin
+            run_test(test_name);
+        end else begin
+            run_test("apb_random_test");
+        end
     end
 
 endmodule
