@@ -1,0 +1,5 @@
+tb_top_sim
+-R
+-cov_db_dir ./cov_work
+-cov_db_name apb_cov
+-testplusarg TESTNAME=apb_random_test
