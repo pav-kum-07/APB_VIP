@@ -63,34 +63,59 @@ Architected for verification scalability across block-level, subsystem, and full
 
 ## 📊 Verification Metrics & Results
 
+### 1. Functional Coverage Metric Closure (100.00%)
+Both the directed test (`apb_write_read_test`) and the 100-cycle constrained-random test (`apb_random_test`) achieve **100.00% Functional Coverage** across all defined coverpoints and cross-coverage:
+
+| Coverpoint / Cross | Monitored Hardware Feature | Score | Status |
+| :--- | :--- | :---: | :---: |
+| **`cp_op`** | Read (`APB_READ`) and Write (`APB_WRITE`) Operations | **100.00%** | 🟢 Complete |
+| **`cp_addr`** | `min_addr` (0x0), `max_addr` (0x3FC), `inside_ram`, `out_of_bound` | **100.00%** | 🟢 Complete |
+| **`cp_pslverr`** | OK Response (`1'b0`) and Slave Error Response (`1'b1`) | **100.00%** | 🟢 Complete |
+| **`cr_op_addr`** | Cross coverage (`cp_op` $\times$ `cp_addr` across all 8 permutations) | **100.00%** | 🟢 Complete |
+| **OVERALL** | **Total SystemVerilog Functional Coverage** | **100.00%** | 🎯 **100% Closure** |
+
 ```text
 ======================================================================
-UVM_INFO apb_coverage.sv @ 325000: uvm_test_top.env.cov [COVERAGE] 
-  TOTAL FUNCTIONAL COVERAGE = 100.00%
-    * Operation (cp_op)      : 100.00%
-    * Address (cp_addr)      : 100.00%
-    * Error Status (pslverr) : 100.00%
-    * Cross (op x addr)      : 100.00%
-======================================================================
-UVM_INFO apb_scoreboard.sv @ 325000: uvm_test_top.env.scb [SCB_SUMMARY]
-==================================================
-           APB SCOREBOARD FINAL REPORT            
-==================================================
- Total Writes Tracked      : 3
- Total Reads Checked       : 3
- Total Matches (PASS)      : 3
- Total Mismatches (FAIL)   : 0
- Unwritten Address Reads   : 0
- Slave Error Responses     : 2
-==================================================
+UVM_INFO apb_coverage.sv @ 4005000: uvm_test_top.env.cov [COVERAGE] ==================================================
+UVM_INFO apb_coverage.sv @ 4005000: uvm_test_top.env.cov [COVERAGE]   TOTAL FUNCTIONAL COVERAGE = 100.00%
+UVM_INFO apb_coverage.sv @ 4005000: uvm_test_top.env.cov [COVERAGE]     * Operation (cp_op)      : 100.00%
+UVM_INFO apb_coverage.sv @ 4005000: uvm_test_top.env.cov [COVERAGE]     * Address (cp_addr)      : 100.00%
+UVM_INFO apb_coverage.sv @ 4005000: uvm_test_top.env.cov [COVERAGE]     * Error Status (pslverr) : 100.00%
+UVM_INFO apb_coverage.sv @ 4005000: uvm_test_top.env.cov [COVERAGE]     * Cross (op x addr)      : 100.00%
+UVM_INFO apb_coverage.sv @ 4005000: uvm_test_top.env.cov [COVERAGE] ==================================================
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY] ==================================================
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY]            APB SCOREBOARD FINAL REPORT            
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY] ==================================================
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY]  Total Writes Tracked      : 39
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY]  Total Reads Checked       : 44
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY]  Total Matches (PASS)      : 13
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY]  Total Mismatches (FAIL)   : 0
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY]  Unwritten Address Reads   : 31
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY]  Slave Error Responses     : 17
+UVM_INFO apb_scoreboard.sv @ 4005000: uvm_test_top.env.scb [SCB_SUMMARY] ==================================================
 --- UVM Report Summary ---
 ** Report counts by severity:
-  UVM_INFO    : 38
-  UVM_WARNING : 2  (Expected negative error responses)
-  UVM_ERROR   : 0  (ALL SCOREBOARD CHECKS & SVA ASSERTIONS PASSED)
+  UVM_INFO    : 99
+  UVM_WARNING : 48 (Expected unwritten-read & slave error protocol warnings)
+  UVM_ERROR   : 0  (ALL DATA COMPARISONS & SVA ASSERTIONS PASSED)
   UVM_FATAL   : 0
 ======================================================================
 ```
+
+### 2. Regression Suite Results
+The full regression suite executes both the directed compliance suite and the constrained-random stress sequence:
+
+| Test Name | Stimulus Type | Transactions | Functional Coverage | Scoreboard Checks |
+| :--- | :--- | :---: | :---: | :---: |
+| **`apb_write_read_test`** | Directed Corner Vectors | 4 pairs (8 transfers) | 100.00% | 3 Matches, 2 Errors, 0 Mismatches |
+| **`apb_random_test`** | Constrained-Random (CRV) | 100 transfers | 100.00% | 13 Matches, 17 Errors, 0 Mismatches |
+| **Regression Merged** | **Complete Suite** | **108 transfers** | 🎯 **100.00%** | **100% PASS (0 Errors)** |
+
+---
+
+### 3. Pure Random vs. Constrained-Random Verification (CRV)
+- **Initial Challenge**: Pure unconstrained randomization scored only **68.75%** functional coverage because `c_addr_range` in `apb_seq_item.sv` constrained addresses to valid RAM space, completely missing out-of-bounds error injection (`PSLVERR=1`).
+- **CRV Solution**: In `apb_random_seq.sv`, `req.c_addr_range.constraint_mode(0)` was disabled, and round-robin coverage buckets (out-of-bounds, min address, max address, and valid interior RAM) were applied, boosting coverage from **68.75% $\rightarrow$ 100.00%**.
 
 ---
 
@@ -151,12 +176,17 @@ APB_VIP/
 ├── apb_env.sv              # Top Environment wiring Agent -> SCB & Coverage
 ├── apb_base_seq.sv         # Base Virtual Sequence
 ├── apb_write_read_seq.sv   # Directed 100% Coverage Stimulus Sequence
+├── apb_random_seq.sv       # Constrained-Random (CRV) Sequence (100% Coverage)
 ├── apb_test.sv             # Base Test
 ├── apb_write_read_test.sv  # Directed Write/Read Test
+├── apb_random_test.sv      # Constrained-Random Test
 ├── apb_pkg.sv              # VIP Package (Compiles classes into namespace)
 ├── apb_slave_dut.sv        # Behavioral 1KB APB Slave Memory RTL Model
 ├── tb_top.sv               # Top-level Testbench Module (Clock & Reset gen)
-├── run.bat                 # Automated Vivado XSim compile & run script
+├── run.bat                 # Standard simulation run script
+├── run_gui.bat             # Vivado GUI waveform debug run script
+├── run_coverage.bat        # Automated Code & Functional Coverage Pipeline
+├── run_regression.bat      # Full Multi-Test Regression Suite with Merged Coverage
 └── README.md               # Complete Project Architecture & Documentation
 ```
 
@@ -167,18 +197,34 @@ APB_VIP/
 ### Prerequisites
 - **AMD Vivado Design Suite** (2020.1 or newer — tested on Vivado 2024.1)
 
-### Execution
-Run the automated batch script in PowerShell / Command Prompt:
-
+### Option 1: Standard Simulation (`run.bat`)
 ```cmd
 cd APB_VIP
 .\run.bat
 ```
 
-The script automatically executes:
-1. **Compilation (`xvlog`)**: Analyzes `apb_if.sv`, `apb_pkg.sv`, and `tb_top.sv` with SystemVerilog and UVM library flags.
-2. **Elaboration (`xelab`)**: Elaborates `tb_top` with `1ns/1ps` timescale resolution and generates simulation snapshot `tb_top_sim`.
-3. **Simulation (`xsim`)**: Executes UVM testbench `apb_write_read_test`, outputs full verification topology, logs transactions, checks assertions, and prints the 100% coverage report.
+### Option 2: Full Code & Functional Coverage Pipeline (`run_coverage.bat`)
+Runs the full 4-step pipeline with line, branch, condition, and toggle coverage and generates interactive HTML dashboards:
+```cmd
+cd APB_VIP
+.\run_coverage.bat
+```
+After completion, view reports in your web browser:
+- **Functional Coverage**: `coverage_report/functionalCoverageReport/dashboard.html`
+- **Code Coverage**: `coverage_report/codeCoverageReport/dashboard.html`
+
+### Option 3: Full Multi-Test Regression Suite (`run_regression.bat`)
+Executes all regression tests (`apb_write_read_test` and `apb_random_test`) and generates a unified merged coverage report:
+```cmd
+cd APB_VIP
+.\run_regression.bat
+```
+
+### Option 4: Interactive Waveform Debugging (`run_gui.bat`)
+```cmd
+cd APB_VIP
+.\run_gui.bat
+```
 
 ---
 
